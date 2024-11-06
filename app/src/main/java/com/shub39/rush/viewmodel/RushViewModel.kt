@@ -3,6 +3,7 @@ package com.shub39.rush.viewmodel
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shub39.rush.database.LrcLibSong
 import com.shub39.rush.ui.page.setting.component.AudioFile
 import com.shub39.rush.database.SearchResult
 import com.shub39.rush.database.Song
@@ -284,7 +285,7 @@ class RushViewModel(
         _lyricsState.update { it.copy(lrcCorrect = it.lrcCorrect.copy(searching = true)) }
 
         val result = withContext(Dispatchers.IO) {
-            SongProvider.lrcLibSearch(track, artist)
+            SongProvider.search("$track $artist")
         }
 
         when (result) {
@@ -302,7 +303,19 @@ class RushViewModel(
                 _lyricsState.update {
                     it.copy(
                         lrcCorrect = it.lrcCorrect.copy(
-                            searchResults = result.data
+                            searchResults = result.data.map { searchResult ->
+                                LrcLibSong(
+                                    id = searchResult.id.toInt(),
+                                    name = searchResult.title,
+                                    trackName = searchResult.title,
+                                    artistName = searchResult.artist,
+                                    albumName = searchResult.album ?: "",
+                                    duration = 0.0,
+                                    instrumental = false,
+                                    plainLyrics = null,
+                                    syncedLyrics = null
+                                )
+                            }
                         )
                     )
                 }
@@ -333,7 +346,7 @@ class RushViewModel(
 
             try {
                 val result = withContext(Dispatchers.IO) {
-                    SongProvider.geniusSearch(query)
+                    SongProvider.search(query)
                 }
 
                 when (result) {
@@ -348,7 +361,7 @@ class RushViewModel(
                     is Result.Success -> {
                         _searchState.update {
                             it.copy(
-                                searchResults = result.data,
+                                searchResults = result.data
                             )
                         }
 
@@ -377,13 +390,9 @@ class RushViewModel(
             }
 
             if (fetch && _lyricsState.value.error == null && _searchState.value.searchResults.isNotEmpty()) {
-
                 fetchLyrics(_searchState.value.searchResults.first().id)
-
             } else {
-
                 toggleAutoChange(false)
-
             }
         }
     }
@@ -478,9 +487,7 @@ class RushViewModel(
         }
     }
 
-    private suspend fun batchDownload(
-        list: List<AudioFile>,
-    ) {
+    private suspend fun batchDownload(list: List<AudioFile>) {
         _settingsState.update {
             it.copy(
                 batchDownload = it.batchDownload.copy(
@@ -493,7 +500,7 @@ class RushViewModel(
 
         list.forEachIndexed { index, audioFile ->
             val result = withContext(Dispatchers.IO) {
-                SongProvider.geniusSearch("${audioFile.title} ${audioFile.artist}")
+                SongProvider.search("${audioFile.title} ${audioFile.artist}")
             }
 
             when (result) {
@@ -511,15 +518,13 @@ class RushViewModel(
                     val id = result.data.first().id
 
                     if (id in savedSongs) {
-
                         _settingsState.update {
                             it.copy(
                                 batchDownload = it.batchDownload.copy(
-                                    indexes = it.batchDownload.indexes.plus(index to true),
+                                    indexes = it.batchDownload.indexes.plus(index to true)
                                 )
                             )
                         }
-
                     } else {
                         val song = withContext(Dispatchers.IO) {
                             SongProvider.fetchLyrics(id)
@@ -542,7 +547,7 @@ class RushViewModel(
                                 _settingsState.update {
                                     it.copy(
                                         batchDownload = it.batchDownload.copy(
-                                            indexes = it.batchDownload.indexes + (index to true),
+                                            indexes = it.batchDownload.indexes + (index to true)
                                         )
                                     )
                                 }
